@@ -1,5 +1,5 @@
+from datetime import timedelta
 from django.conf import settings
-from django.utils import timezone
 
 JWT_REFRESH_TOKEN_N_BYTES = (
     settings.JWT_REFRESH_TOKEN_N_BYTES
@@ -12,13 +12,13 @@ JWT_REFRESH_TOKEN_N_BYTES = (
 JWT_ACCESS_TOKEN_EXPIRATION_DELTA = (
     settings.JWT_ACCESS_TOKEN_EXPIRATION_DELTA
     if hasattr(settings, "JWT_ACCESS_TOKEN_EXPIRATION_DELTA")
-    else timezone.timedelta(seconds=60)
+    else timedelta(seconds=60)
 )
 
 JWT_REFRESH_TOKEN_EXPIRATION_DELTA = (
     settings.JWT_REFRESH_TOKEN_EXPIRATION_DELTA
     if hasattr(settings, "JWT_REFRESH_TOKEN_EXPIRATION_DELTA")
-    else timezone.timedelta(seconds=60 * 60 * 24 * 7)
+    else timedelta(seconds=60 * 60 * 24 * 7)
 )
 
 # Cookie Settings

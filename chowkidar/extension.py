@@ -1,7 +1,7 @@
 from typing import Optional
 from django.http import HttpRequest
 from django.utils import timezone
-from strawberry.extensions import Extension
+from strawberry.extensions import SchemaExtension
 from strawberry.types import ExecutionContext, Info
 
 from .settings import (
@@ -13,7 +13,7 @@ from .utils.jwt import decode_payload_from_token, generate_token_from_claims
 from .models import AbstractRefreshToken
 
 
-class JWTAuthExtension(Extension):
+class JWTAuthExtension(SchemaExtension):
     """
     Strawberry extension to process the request, setup info.context.userID and perform token refresh.
     This class persists throughout the processing of entire request, and is called multiple times.
@@ -27,8 +27,15 @@ class JWTAuthExtension(Extension):
     def __init__(self, *, execution_context: ExecutionContext):
         # Initialize extension with the execution context
         super().__init__(execution_context=execution_context)
-        # We don't initialize state here as it needs to be reset for each request
-        # State will be initialized in on_request_start
+        # Initialize state variables immediately to prevent AttributeError
+        # if resolve() is called before on_request_start() completes.
+        # These will be reset in _init_request_state() for each request.
+        self._request: Optional[HttpRequest] = None
+        self.userID = None
+        self.refreshToken = None
+        self.refreshTokenObj: Optional[AbstractRefreshToken] = None
+        self._new_JWT_access_token = None
+        self._remove_auth_cookies = False
 
     def _init_request_state(self) -> None:
         """
@@ -156,6 +163,12 @@ class JWTAuthExtension(Extension):
         So for efficiency, resolving or much processing should not be done here.
         Therefore, we already use the on_request_start() function to resolve and cache required data in the class.
         """
+        # Defensive checks in case resolve() is called before on_request_start()
+        if not hasattr(self, '_new_JWT_access_token'):
+            self._new_JWT_access_token = None
+        if not hasattr(self, '_remove_auth_cookies'):
+            self._remove_auth_cookies = False
+
         # Incase a new JWT access token was generated earlier from `on_request_start`, we set it to request contest
         # this will be later picked up by view.py and to set the access token cookie in the response
         if self._new_JWT_access_token is not None:
@@ -165,10 +178,10 @@ class JWTAuthExtension(Extension):
         elif self._remove_auth_cookies:
             setattr(info.context.request, "PERFORM_LOGOUT", True)
 
-        setattr(info.context, "refreshTokenObj", self.refreshTokenObj)
-        setattr(info.context, "refreshToken", self.refreshToken)
-        setattr(info.context, "userID", self.userID)
-        setattr(info.context, "request", self._request)
+        setattr(info.context, "refreshTokenObj", getattr(self, 'refreshTokenObj', None))
+        setattr(info.context, "refreshToken", getattr(self, 'refreshToken', None))
+        setattr(info.context, "userID", getattr(self, 'userID', None))
+        setattr(info.context, "request", getattr(self, '_request', None))
 
         return _next(root, info, **kwargs)
 

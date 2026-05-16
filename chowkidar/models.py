@@ -65,9 +65,12 @@ class AbstractRefreshToken(models.Model):
         abstract = True
         verbose_name_plural = "User Refresh Tokens"
         verbose_name = "User Refresh Token"
-        unique_together = [
+        constraints = [
             # (token, revoked) ensures uniqueness of non-revoked tokens (since revoked=null)
-            ("token", "revoked")
+            models.UniqueConstraint(
+                fields=["token", "revoked"],
+                name="%(app_label)s_%(class)s_unique_token_revoked",
+            )
         ]
 
     def __str__(self):

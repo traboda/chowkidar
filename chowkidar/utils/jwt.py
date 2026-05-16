@@ -1,5 +1,5 @@
 import jwt
-from django.utils.timezone import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any
 
 from ..settings import (
@@ -34,15 +34,15 @@ def decode_token(token: str) -> Dict[str, Any]:
         jwt=token,
         # public key or secret key
         key=JWT_PUBLIC_KEY or JWT_SECRET_KEY,
-        verify=True,
         algorithms=[JWT_ALGORITHM],
         # time margin in seconds for the expiration check
-        leeyway=JWT_LEEWAY,
+        leeway=JWT_LEEWAY,
         options={
             "require_iat": True,
             "require_exp": True,
             "verify_iat": True,
             "verify_exp": True,
+            "verify_signature": True,
         },
         issuer=JWT_ISSUER,
     )
@@ -56,7 +56,7 @@ def generate_token_from_claims(claims: dict, expiration_delta: timedelta) -> obj
     :param expiration_delta: timedelta object representing duration after issue time when the token should expire
     :return: an object containing 'token' as str, and payload as dict
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     payload = dict()
     payload.update(claims)
     registered_claims = {
