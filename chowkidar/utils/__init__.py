@@ -1,12 +1,13 @@
-from typing import Any, Union
+from __future__ import annotations
 
+from typing import Any
 from django.http import HttpRequest
 from graphql import GraphQLResolveInfo
 from strawberry.django.context import StrawberryDjangoContext
 from strawberry.types import Info
 
 
-def get_context(info: Union[HttpRequest, Info[Any, Any], GraphQLResolveInfo]) -> Any:
+def get_context(info: HttpRequest | Info[Any, Any] | GraphQLResolveInfo) -> Any:
     if hasattr(info, "context"):
         ctx = getattr(info, "context")
         if isinstance(ctx, StrawberryDjangoContext):

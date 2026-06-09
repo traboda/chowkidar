@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import jwt
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any
+from django.utils import timezone
+from typing import Any
 
 from ..settings import (
     JWT_ISSUER,
@@ -23,7 +26,7 @@ def encode_payload(payload: object) -> str:
     )
 
 
-def decode_token(token: str) -> Dict[str, Any]:
+def decode_token(token: str) -> dict[str, Any]:
     """
     Decodes a JWT token string, with verification and returns the payload.
 
@@ -56,7 +59,7 @@ def generate_token_from_claims(claims: dict, expiration_delta: timedelta) -> obj
     :param expiration_delta: timedelta object representing duration after issue time when the token should expire
     :return: an object containing 'token' as str, and payload as dict
     """
-    now = datetime.now(timezone.utc)
+    now = timezone.now()
     payload = dict()
     payload.update(claims)
     registered_claims = {
@@ -74,7 +77,7 @@ def generate_token_from_claims(claims: dict, expiration_delta: timedelta) -> obj
     }
 
 
-def decode_payload_from_token(token: str) -> Dict[str, Any]:
+def decode_payload_from_token(token: str) -> dict[str, Any]:
     """
     Decode the passed JWT token, verify it and get the payload data inside it
 

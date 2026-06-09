@@ -1,4 +1,6 @@
-from typing import Optional
+from __future__ import annotations
+
+
 from django.http import HttpRequest
 from django.utils import timezone
 from strawberry.extensions import SchemaExtension
@@ -30,10 +32,10 @@ class JWTAuthExtension(SchemaExtension):
         # Initialize state variables immediately to prevent AttributeError
         # if resolve() is called before on_request_start() completes.
         # These will be reset in _init_request_state() for each request.
-        self._request: Optional[HttpRequest] = None
+        self._request: HttpRequest | None = None
         self.userID = None
         self.refreshToken = None
-        self.refreshTokenObj: Optional[AbstractRefreshToken] = None
+        self.refreshTokenObj: AbstractRefreshToken | None = None
         self._new_JWT_access_token = None
         self._remove_auth_cookies = False
 
@@ -42,17 +44,17 @@ class JWTAuthExtension(SchemaExtension):
         Initialize/reset all state variables for the current request.
         This ensures each request gets a fresh state, preventing state leakage between requests.
         """
-        self._request: Optional[HttpRequest] = None
+        self._request: HttpRequest | None = None
         self.userID = None
         self.refreshToken = None
-        self.refreshTokenObj: Optional[AbstractRefreshToken] = None
+        self.refreshTokenObj: AbstractRefreshToken | None = None
         self._new_JWT_access_token = None
         self._remove_auth_cookies = False
 
     def is_cookie_in_request(self, cookie_name: str) -> bool:
         return cookie_name in self._request.COOKIES and self._request.COOKIES[cookie_name]
 
-    def _get_token_payload_from_cookie(self, cookie_name: str) -> Optional[dict]:
+    def _get_token_payload_from_cookie(self, cookie_name: str) -> dict | None:
         """
         Get token payload from request cookies for the cookie_name given after decoding the token, if it exists
 
@@ -65,7 +67,7 @@ class JWTAuthExtension(SchemaExtension):
             except AuthError:
                 return None
 
-    def _get_refresh_token_object(self) -> Optional[AbstractRefreshToken]:
+    def _get_refresh_token_object(self) -> AbstractRefreshToken | None:
         """
         Get RefreshToken object from the already available self.refreshToken, if it exists and is valid.
         The refresh token is valid if it is not expired and is not revoked.
