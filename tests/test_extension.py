@@ -3,7 +3,9 @@ Tests for chowkidar/extension.py
 
 Covers:
   - JWTAuthExtension.__init__ initializes all state variables
-  - resolve() doesn't crash with AttributeError (the critical bug fix)
+  - JWTAuthExtension can be instantiated without execution_context (new strawberry pattern)
+  - resolve() doesn't crash with AttributeError
+  - on_operation() generator hook works correctly
   - _init_request_state() resets state correctly
 """
 from unittest.mock import MagicMock, patch
@@ -17,51 +19,43 @@ from strawberry.types import ExecutionContext
 class TestExtensionInit:
     """Tests for JWTAuthExtension.__init__ state initialization."""
 
-    def _make_extension(self):
-        """Create a JWTAuthExtension with a mocked execution context."""
+    def _make_extension(self, with_execution_context=True):
+        """Create a JWTAuthExtension, optionally with a mocked execution context."""
         from chowkidar.extension import JWTAuthExtension
 
-        mock_execution_context = MagicMock(spec=ExecutionContext)
-        mock_execution_context.context = {"request": MagicMock()}
-        ext = JWTAuthExtension(execution_context=mock_execution_context)
+        if with_execution_context:
+            mock_execution_context = MagicMock(spec=ExecutionContext)
+            mock_execution_context.context = {"request": MagicMock()}
+            ext = JWTAuthExtension(execution_context=mock_execution_context)
+        else:
+            ext = JWTAuthExtension()
         return ext
 
     def test_init_sets_request(self):
-        """__init__ should set _request to None."""
         ext = self._make_extension()
         assert ext._request is None
 
     def test_init_sets_userID(self):
-        """__init__ should set userID to None."""
         ext = self._make_extension()
         assert ext.userID is None
 
     def test_init_sets_refreshToken(self):
-        """__init__ should set refreshToken to None."""
         ext = self._make_extension()
         assert ext.refreshToken is None
 
     def test_init_sets_refreshTokenObj(self):
-        """__init__ should set refreshTokenObj to None."""
         ext = self._make_extension()
         assert ext.refreshTokenObj is None
 
     def test_init_sets_new_JWT_access_token(self):
-        """__init__ should set _new_JWT_access_token to None.
-        This is the attribute that caused the original AttributeError.
-        """
         ext = self._make_extension()
         assert ext._new_JWT_access_token is None
 
     def test_init_sets_remove_auth_cookies(self):
-        """__init__ should set _remove_auth_cookies to False."""
         ext = self._make_extension()
         assert ext._remove_auth_cookies is False
 
     def test_all_six_state_vars_exist_after_init(self):
-        """All 6 state variables should exist immediately after __init__.
-        This is the core test for the critical bug fix.
-        """
         ext = self._make_extension()
         attrs = [
             "_request",
@@ -73,6 +67,20 @@ class TestExtensionInit:
         ]
         for attr in attrs:
             assert hasattr(ext, attr), f"Missing attribute after __init__: {attr}"
+
+    def test_init_without_execution_context(self):
+        """Extension can be instantiated without execution_context (strawberry sets it later)."""
+        ext = self._make_extension(with_execution_context=False)
+        assert ext._request is None
+        assert ext.userID is None
+
+    def test_init_with_execution_context_backward_compat(self):
+        """Passing execution_context explicitly still works (backward compatibility)."""
+        from chowkidar.extension import JWTAuthExtension
+        mock_ec = MagicMock(spec=ExecutionContext)
+        mock_ec.context = {"request": MagicMock()}
+        # Should not raise
+        ext = JWTAuthExtension(execution_context=mock_ec)
 
 
 class TestResolveDefensiveGuards:
@@ -86,13 +94,10 @@ class TestResolveDefensiveGuards:
         ext = JWTAuthExtension(execution_context=mock_execution_context)
         return ext
 
-    def test_resolve_without_on_request_start(self):
-        """resolve() should NOT crash even if on_request_start() was never called.
-        This simulates the exact bug from the error report.
-        """
+    def test_resolve_without_on_operation(self):
+        """resolve() should NOT crash even if on_operation() was never called."""
         ext = self._make_extension()
 
-        # Create mock info object
         mock_info = MagicMock()
         mock_info.context = MagicMock()
         mock_info.context.request = MagicMock()
@@ -100,7 +105,6 @@ class TestResolveDefensiveGuards:
         mock_next = MagicMock(return_value="resolved_value")
         mock_root = MagicMock()
 
-        # This should NOT raise AttributeError
         result = ext.resolve(mock_next, mock_root, mock_info)
         assert result == "resolved_value"
         mock_next.assert_called_once()
@@ -109,7 +113,6 @@ class TestResolveDefensiveGuards:
         """resolve() should handle missing attributes via hasattr/getattr guards."""
         ext = self._make_extension()
 
-        # Forcefully delete state to simulate extreme edge case
         if hasattr(ext, "_new_JWT_access_token"):
             del ext._new_JWT_access_token
         if hasattr(ext, "_remove_auth_cookies"):
@@ -121,7 +124,6 @@ class TestResolveDefensiveGuards:
         mock_next = MagicMock(return_value="ok")
         mock_root = MagicMock()
 
-        # Should still not crash — defensive hasattr guards catch this
         result = ext.resolve(mock_next, mock_root, mock_info)
         assert result == "ok"
 
@@ -132,8 +134,6 @@ class TestResolveDefensiveGuards:
         ext.refreshToken = "test-token"
         ext._request = "mock-request"
 
-        # Use a simple namespace object instead of MagicMock for context
-        # so that setattr calls actually stick
         class SimpleContext:
             pass
 
@@ -146,11 +146,41 @@ class TestResolveDefensiveGuards:
 
         ext.resolve(mock_next, mock_root, mock_info)
 
-        # Verify context was populated by resolve()
         assert ctx.userID == 42
         assert ctx.refreshToken == "test-token"
         assert ctx.refreshTokenObj is None
         assert ctx.request == "mock-request"
+
+
+class TestOnOperation:
+    """Tests for the on_operation() generator hook."""
+
+    def _make_extension(self):
+        from chowkidar.extension import JWTAuthExtension
+
+        mock_execution_context = MagicMock(spec=ExecutionContext)
+        mock_request = MagicMock()
+        mock_request.COOKIES = {}
+        mock_execution_context.context = {"request": mock_request}
+        ext = JWTAuthExtension()
+        # Strawberry sets execution_context on the instance before calling hooks
+        ext.execution_context = mock_execution_context
+        return ext
+
+    def test_on_operation_is_generator(self):
+        """on_operation() should be a generator that yields once."""
+        ext = self._make_extension()
+        gen = ext.on_operation()
+        next(gen)
+        with pytest.raises(StopIteration):
+            next(gen)
+
+    def test_on_operation_sets_request(self):
+        """on_operation() should set _request from execution context."""
+        ext = self._make_extension()
+        gen = ext.on_operation()
+        next(gen)
+        assert ext._request is not None
 
 
 class TestInitRequestState:
@@ -164,19 +194,15 @@ class TestInitRequestState:
         return JWTAuthExtension(execution_context=mock_execution_context)
 
     def test_reset_clears_state(self):
-        """_init_request_state() should reset all state to defaults."""
         ext = self._make_extension()
 
-        # Set state as if a request was processed
         ext.userID = 99
         ext.refreshToken = "old-token"
         ext._new_JWT_access_token = {"token": "abc"}
         ext._remove_auth_cookies = True
 
-        # Reset
         ext._init_request_state()
 
-        # All should be back to defaults
         assert ext._request is None
         assert ext.userID is None
         assert ext.refreshToken is None
@@ -185,7 +211,6 @@ class TestInitRequestState:
         assert ext._remove_auth_cookies is False
 
     def test_no_state_leakage_between_resets(self):
-        """Calling _init_request_state() twice should produce clean state."""
         ext = self._make_extension()
 
         ext.userID = 1

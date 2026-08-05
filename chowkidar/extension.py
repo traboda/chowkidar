@@ -26,12 +26,10 @@ class JWTAuthExtension(SchemaExtension):
     Read more about custom extensions here -> https://strawberry.rocks/docs/guides/custom-extensions
     """
 
-    def __init__(self, *, execution_context: ExecutionContext):
-        # Initialize extension with the execution context
+    def __init__(self, *, execution_context: ExecutionContext | None = None):
         super().__init__(execution_context=execution_context)
         # Initialize state variables immediately to prevent AttributeError
-        # if resolve() is called before on_request_start() completes.
-        # These will be reset in _init_request_state() for each request.
+        # if resolve() is called before on_operation() runs.
         self._request: HttpRequest | None = None
         self.userID = None
         self.refreshToken = None
@@ -95,16 +93,15 @@ class JWTAuthExtension(SchemaExtension):
             self._remove_auth_cookies = True
             return None
 
-    def on_request_start(self):
+    def on_operation(self):
         """
-        This function is called by strawberry before it starts to process/resolve the actual graphql query/mutation.
-        This function performs the following tasks:
-            - resolves and sets IP address of the client
-            - resolve and cache requester userID in the class, which would later be used to set info.context.userID
-            - generate a new JWT access token if the current one is expired, if there is an active refresh token
+        Called by strawberry before and after a GraphQL operation (query/mutation).
+        Code before `yield` runs at operation start, code after `yield` runs at operation end.
 
-        Note: State is reset at the start of each request to prevent state leakage between requests
-        due to potential extension instance reuse by Strawberry.
+        Before yield:
+            - resets state for the new request
+            - resolves and caches requester userID
+            - generates a new JWT access token if needed
         """
         # Reset all state variables to ensure clean state for new request
         self._init_request_state()
@@ -126,20 +123,15 @@ class JWTAuthExtension(SchemaExtension):
 
         # if a valid refresh token cookie was available, we try to generate new access token with the refresh token
         elif refresh_token_payload is not None:
-            # Resolve Refresh Token model instance using the token resolved from cookie payload,
-            # and thereby, also check if it exists and is valid in database records
             self.refreshTokenObj: AbstractRefreshToken = self._get_refresh_token_object()
 
-            # if a valid refresh token was available, then we generate a new access token
             if self.refreshTokenObj is not None:
                 self.refreshToken = self.refreshTokenObj.token
                 user = self.refreshTokenObj.user
 
-                # update last login timestamp of the user
                 user.last_login = timezone.now()
                 user.save()
 
-                # generate a new access token to be given to the user
                 self._new_JWT_access_token = generate_token_from_claims(
                     claims={
                         "userID": user.id,
@@ -150,28 +142,24 @@ class JWTAuthExtension(SchemaExtension):
 
                 self.userID = user.id
 
-        # if both access_token_payload & refresh_token_payload could not be resolved
         else:
-            # if the cookies existed in the request, they are invalid now, and thus remove them
             if (
                 self.is_cookie_in_request(JWT_ACCESS_TOKEN_COOKIE_NAME) or
                 self.is_cookie_in_request(JWT_REFRESH_TOKEN_COOKIE_NAME)
             ):
                 self._remove_auth_cookies = True
 
+        yield
+
     def resolve(self, _next, root, info: Info, *args, **kwargs):
         """
-        This function is called by strawberry after everytime it resolves a field/type.
-        So for efficiency, resolving or much processing should not be done here.
-        Therefore, we already use the on_request_start() function to resolve and cache required data in the class.
+        Called by strawberry for every field resolution. Minimal processing here;
+        state is prepared in on_operation().
         """
-        # Defensive checks in case resolve() is called before on_request_start()
         if not hasattr(self, '_new_JWT_access_token'):
             self._new_JWT_access_token = None
         if not hasattr(self, '_remove_auth_cookies'):
             self._remove_auth_cookies = False
-
-        # Incase a new JWT access token was generated earlier from `on_request_start`, we set it to request contest
         # this will be later picked up by view.py and to set the access token cookie in the response
         if self._new_JWT_access_token is not None:
             setattr(info.context.request, "REFRESHED_ACCESS_TOKEN", self._new_JWT_access_token)
