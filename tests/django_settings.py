@@ -1,7 +1,6 @@
 """
 Minimal Django settings for running chowkidar tests standalone.
 """
-import os
 
 SECRET_KEY = "test-secret-key-for-chowkidar-unit-tests"
 DEBUG = True

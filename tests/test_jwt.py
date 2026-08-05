@@ -10,18 +10,17 @@ Covers:
   - expired tokens raise AuthError
   - tampered tokens raise AuthError
 """
+
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
 
 import jwt as pyjwt
 import pytest
 
-from chowkidar.utils.jwt import (
-    generate_token_from_claims,
-    decode_payload_from_token,
-    encode_payload,
-    decode_token,
-)
+from chowkidar.utils.jwt import decode_payload_from_token
+from chowkidar.utils.jwt import generate_token_from_claims
 from chowkidar.utils.exceptions import AuthError
 
 
@@ -90,6 +89,7 @@ class TestGenerateToken:
     def test_issuer_matches_settings(self):
         """iss claim should match JWT_ISSUER from settings."""
         from chowkidar.settings import JWT_ISSUER
+
         result = generate_token_from_claims(
             claims={"userID": 1},
             expiration_delta=timedelta(minutes=5),
@@ -152,8 +152,8 @@ class TestDecodeToken:
         # Create a token with a different secret
         payload = {
             "userID": 1,
-            "iat": datetime.now(timezone.utc),
-            "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+            "iat": datetime.now(UTC),
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
             "iss": "chowkidar-tests",
         }
         token = pyjwt.encode(payload, key="wrong-secret", algorithm="HS256")
@@ -168,19 +168,23 @@ class TestTimedeltaSettings:
     def test_access_token_delta_is_timedelta(self):
         """JWT_ACCESS_TOKEN_EXPIRATION_DELTA should be a timedelta."""
         from chowkidar.settings import JWT_ACCESS_TOKEN_EXPIRATION_DELTA
+
         assert isinstance(JWT_ACCESS_TOKEN_EXPIRATION_DELTA, timedelta)
 
     def test_refresh_token_delta_is_timedelta(self):
         """JWT_REFRESH_TOKEN_EXPIRATION_DELTA should be a timedelta."""
         from chowkidar.settings import JWT_REFRESH_TOKEN_EXPIRATION_DELTA
+
         assert isinstance(JWT_REFRESH_TOKEN_EXPIRATION_DELTA, timedelta)
 
     def test_access_token_default_is_60_seconds(self):
         """Default access token expiry should be 60 seconds."""
         from chowkidar.settings import JWT_ACCESS_TOKEN_EXPIRATION_DELTA
+
         assert JWT_ACCESS_TOKEN_EXPIRATION_DELTA == timedelta(seconds=60)
 
     def test_refresh_token_default_is_7_days(self):
         """Default refresh token expiry should be 7 days."""
         from chowkidar.settings import JWT_REFRESH_TOKEN_EXPIRATION_DELTA
+
         assert JWT_REFRESH_TOKEN_EXPIRATION_DELTA == timedelta(days=7)

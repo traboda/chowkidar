@@ -8,11 +8,10 @@ Covers:
   - on_operation() generator hook works correctly
   - _init_request_state() resets state correctly
 """
-from unittest.mock import MagicMock, patch
-from datetime import timedelta
+
+from unittest.mock import MagicMock
 
 import pytest
-
 from strawberry.types import ExecutionContext
 
 
@@ -77,10 +76,11 @@ class TestExtensionInit:
     def test_init_with_execution_context_backward_compat(self):
         """Passing execution_context explicitly still works (backward compatibility)."""
         from chowkidar.extension import JWTAuthExtension
+
         mock_ec = MagicMock(spec=ExecutionContext)
         mock_ec.context = {"request": MagicMock()}
         # Should not raise
-        ext = JWTAuthExtension(execution_context=mock_ec)
+        JWTAuthExtension(execution_context=mock_ec)
 
 
 class TestResolveDefensiveGuards:

@@ -5,6 +5,7 @@ Covers:
   - AbstractRefreshToken uses UniqueConstraint (not unique_together)
   - The constraint name uses %(app_label)s_%(class)s_ template
 """
+
 from django.db import models
 
 from chowkidar.models import AbstractRefreshToken
@@ -16,9 +17,7 @@ class TestAbstractRefreshTokenMeta:
     def test_no_unique_together(self):
         """unique_together should NOT be set (removed for Django 6 compat)."""
         meta = AbstractRefreshToken._meta
-        assert not meta.unique_together, (
-            f"unique_together should be empty, got: {meta.unique_together}"
-        )
+        assert not meta.unique_together, f"unique_together should be empty, got: {meta.unique_together}"
 
     def test_has_constraints(self):
         """Meta.constraints should have at least one UniqueConstraint."""
