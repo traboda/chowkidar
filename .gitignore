@@ -11,3 +11,12 @@ __pycache__/
 
 # Testing
 .pytest_cache/
+
+# Environment Variables
+.coverage
+.coverage.*
+coverage.xml
+report.xml
+htmlcov/
+.vscode/
+ai-prompts/
