@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.apps import apps
 from django.conf import settings
 from django.http import HttpRequest
+
+if TYPE_CHECKING:
+    from django.contrib.auth.models import AbstractUser
 
 User = apps.get_model(settings.AUTH_USER_MODEL, require_ready=False)
 
@@ -11,7 +16,7 @@ def authenticate_with_username(
     password: str,
     username: str,
     request: HttpRequest | None = None,
-) -> User:
+) -> AbstractUser:
     """Authenticate a user by username and password via Django's auth backend.
 
     Parameters
@@ -63,7 +68,7 @@ def authenticate_with_email(
     password: str,
     email: str,
     request: HttpRequest | None = None,
-) -> User:
+) -> AbstractUser:
     """Authenticate a user by email and password.
 
     Parameters
@@ -120,7 +125,7 @@ def authenticate(
     username: str | None = None,
     email: str | None = None,
     request: HttpRequest | None = None,
-) -> User:
+) -> AbstractUser:
     """Authenticate a user by email or username with the given password.
 
     Parameters
