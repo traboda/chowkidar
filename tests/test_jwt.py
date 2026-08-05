@@ -156,10 +156,91 @@ class TestDecodeToken:
             "exp": datetime.now(UTC) + timedelta(minutes=5),
             "iss": "chowkidar-tests",
         }
-        token = pyjwt.encode(payload, key="wrong-secret", algorithm="HS256")
+        token = pyjwt.encode(
+            payload,
+            key="wrong-secret-key-long-enough-for-hs256",
+            algorithm="HS256",
+        )
+
         with pytest.raises(AuthError) as exc_info:
             decode_payload_from_token(token)
         assert exc_info.value.code == "INVALID_TOKEN"
+
+
+class TestJWTSecurityEdgeCases:
+    """Security and edge-case tests for JWT encode/decode."""
+
+    def test_empty_token_raises_auth_error(self):
+        """An empty string token should raise AuthError."""
+        with pytest.raises(AuthError) as exc_info:
+            decode_payload_from_token("")
+        assert exc_info.value.code == "INVALID_TOKEN"
+
+    def test_none_algorithm_attack(self):
+        """A token with alg=none must be rejected."""
+        payload = {
+            "userID": 1,
+            "iat": datetime.now(UTC),
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
+            "iss": "chowkidar-tests",
+        }
+        token = pyjwt.encode(payload, key="", algorithm="none")
+        with pytest.raises(AuthError) as exc_info:
+            decode_payload_from_token(token)
+        assert exc_info.value.code == "INVALID_TOKEN"
+
+    def test_garbage_token_raises_auth_error(self):
+        """Completely invalid data should raise AuthError."""
+        with pytest.raises(AuthError) as exc_info:
+            decode_payload_from_token("not.a.jwt.at.all")
+        assert exc_info.value.code == "INVALID_TOKEN"
+
+    def test_wrong_issuer_raises_auth_error(self):
+        """A token with a different issuer should be rejected."""
+        from chowkidar.settings import JWT_SECRET_KEY
+
+        payload = {
+            "userID": 1,
+            "iat": datetime.now(UTC),
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
+            "iss": "attacker-controlled-issuer",
+        }
+        token = pyjwt.encode(
+            payload,
+            key=JWT_SECRET_KEY,
+            algorithm="HS256",
+        )
+        with pytest.raises(AuthError) as exc_info:
+            decode_payload_from_token(token)
+        assert exc_info.value.code == "INVALID_TOKEN"
+
+    def test_token_with_zero_expiration_delta(self):
+        """A token with zero timedelta should expire immediately (within leeway)."""
+        result = generate_token_from_claims(
+            claims={"userID": 1},
+            expiration_delta=timedelta(seconds=0),
+        )
+        decoded = decode_payload_from_token(result["token"])
+        assert decoded["userID"] == 1
+
+    def test_custom_claims_not_overwritten_by_registered(self):
+        """Custom claims should not be overwritten by iat/exp/iss."""
+        result = generate_token_from_claims(
+            claims={"userID": 1, "custom": "value"},
+            expiration_delta=timedelta(minutes=5),
+        )
+        decoded = decode_payload_from_token(result["token"])
+        assert decoded["custom"] == "value"
+        assert decoded["userID"] == 1
+
+    def test_very_long_expiration_still_valid(self):
+        """A token with a very long expiration should still decode."""
+        result = generate_token_from_claims(
+            claims={"userID": 1},
+            expiration_delta=timedelta(days=365 * 10),
+        )
+        decoded = decode_payload_from_token(result["token"])
+        assert decoded["userID"] == 1
 
 
 class TestTimedeltaSettings:
@@ -188,3 +269,11 @@ class TestTimedeltaSettings:
         from chowkidar.settings import JWT_REFRESH_TOKEN_EXPIRATION_DELTA
 
         assert JWT_REFRESH_TOKEN_EXPIRATION_DELTA == timedelta(days=7)
+
+
+__all__ = [
+    "TestGenerateToken",
+    "TestDecodeToken",
+    "TestJWTSecurityEdgeCases",
+    "TestTimedeltaSettings",
+]
